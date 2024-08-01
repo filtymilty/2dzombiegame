@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Zombie Shooter</title>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 10px; 
+            background-color: #333; 
+            color: white; 
+            font-family: Arial, sans-serif;
+        }
+        #gameContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+        }
+        #scoreBoard {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 800px;
+            margin-bottom: 10px;
+        }
+        canvas { 
+            border: 2px solid white;
+            max-width: 800px;
+            max-height: 600px;
+            background-color: #e0e0e0;
+            cursor: none;
+        }
+        #pauseMenu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+        #resumeButton {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="scoreBoard">
+            <div id="score">Score: 0</div>
+            <div id="highScore">High Score: 0</div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="pauseMenu">
+            <h2>PAUSED</h2>
+            <button id="resumeButton">Resume</button>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const highScoreElement = document.getElementById('highScore');
+        const pauseMenu = document.getElementById('pauseMenu');
+        const resumeButton = document.getElementById('resumeButton');
+
+        function resizeCanvas() {
+            const maxWidth = 800;
+            const maxHeight = 600;
+            const containerWidth = document.getElementById('gameContainer').clientWidth;
+            const containerHeight = document.getElementById('gameContainer').clientHeight - document.getElementById('scoreBoard').clientHeight - 20;
+
+            let newWidth = Math.min(containerWidth, maxWidth);
+            let newHeight = Math.min(containerHeight, maxHeight);
+
+            if (newWidth / newHeight > maxWidth / maxHeight) {
+                newWidth = newHeight * (maxWidth / maxHeight);
+            } else {
+                newHeight = newWidth / (maxWidth / maxHeight);
+            }
+
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            size: 20,
+            speed: 3,
+            color: 'blue'
+        };
+
+        const bullets = [];
+        const zombies = [];
+        const bulletSpeed = 12; // Increased from 10 to 12
+        const bulletSize = 6; // Increased from 5 to 6
+        const bulletColor = '#cccc00'; // Slightly darker yellow
+        const zombieSize = 20;
+        const zombieSpeed = 1;
+
+        let score = 0;
+        let highScore = 0;
+        let gameOver = false;
+        let isPaused = false;
+        let keys = {};
+        let mouseX = 0;
+        let mouseY = 0;
+
+        function spawnZombie() {
+            const side = Math.floor(Math.random() * 4);
+            let x, y;
+            switch(side) {
+                case 0: x = Math.random() * canvas.width; y = -zombieSize; break;
+                case 1: x = canvas.width + zombieSize; y = Math.random() * canvas.height; break;
+                case 2: x = Math.random() * canvas.width; y = canvas.height + zombieSize; break;
+                case 3: x = -zombieSize; y = Math.random() * canvas.height; break;
+            }
+            zombies.push({ x, y, size: zombieSize, speed: zombieSpeed, color: 'green' });
+        }
+
+        function drawPlayer() {
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x - player.size / 2, player.y - player.size / 2, player.size, player.size);
+        }
+
+        function drawBullets() {
+            ctx.fillStyle = bulletColor;
+            bullets.forEach(bullet => {
+                ctx.fillRect(bullet.x - bulletSize / 2, bullet.y - bulletSize / 2, bulletSize, bulletSize);
+            });
+        }
+
+        function drawZombies() {
+            zombies.forEach(zombie => {
+                ctx.fillStyle = zombie.color;
+                ctx.fillRect(zombie.x - zombie.size / 2, zombie.y - zombie.size / 2, zombie.size, zombie.size);
+            });
+        }
+
+        function drawCrosshair() {
+            const size = 10;
+            const gap = 5;
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            ctx.moveTo(mouseX, mouseY - gap - size);
+            ctx.lineTo(mouseX, mouseY - gap);
+            ctx.moveTo(mouseX, mouseY + gap);
+            ctx.lineTo(mouseX, mouseY + gap + size);
+            ctx.moveTo(mouseX - gap - size, mouseY);
+            ctx.lineTo(mouseX - gap, mouseY);
+            ctx.moveTo(mouseX + gap, mouseY);
+            ctx.lineTo(mouseX + gap + size, mouseY);
+            ctx.stroke();
+        }
+
+        function updateScore() {
+            scoreElement.textContent = `Score: ${score}`;
+            if (score > highScore) {
+                highScore = score;
+                highScoreElement.textContent = `High Score: ${highScore}`;
+            }
+        }
+
+        function update() {
+            if (gameOver || isPaused) return;
+
+            // Player movement
+            if (keys['w'] || keys['W'] || keys['ArrowUp']) player.y -= player.speed;
+            if (keys['s'] || keys['S'] || keys['ArrowDown']) player.y += player.speed;
+            if (keys['a'] || keys['A'] || keys['ArrowLeft']) player.x -= player.speed;
+            if (keys['d'] || keys['D'] || keys['ArrowRight']) player.x += player.speed;
+
+            player.x = Math.max(player.size / 2, Math.min(canvas.width - player.size / 2, player.x));
+            player.y = Math.max(player.size / 2, Math.min(canvas.height - player.size / 2, player.y));
+
+            bullets.forEach(bullet => {
+                bullet.x += bullet.dx;
+                bullet.y += bullet.dy;
+            });
+
+            bullets.splice(0, bullets.length, ...bullets.filter(bullet => 
+                bullet.x > 0 && bullet.x < canvas.width && bullet.y > 0 && bullet.y < canvas.height
+            ));
+
+            zombies.forEach(zombie => {
+                const dx = player.x - zombie.x;
+                const dy = player.y - zombie.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                zombie.x += (dx / dist) * zombie.speed;
+                zombie.y += (dy / dist) * zombie.speed;
+
+                if (dist < (player.size + zombie.size) / 2) {
+                    gameOver = true;
+                    updateScore();
+                }
+
+                bullets.forEach((bullet, bulletIndex) => {
+                    const bulletDist = Math.sqrt((bullet.x - zombie.x)**2 + (bullet.y - zombie.y)**2);
+                    if (bulletDist < (bulletSize + zombie.size) / 2) {
+                        zombies.splice(zombies.indexOf(zombie), 1);
+                        bullets.splice(bulletIndex, 1);
+                        score++;
+                        updateScore();
+                        spawnZombie();
+                    }
+                });
+            });
+
+            if (Math.random() < 0.02) spawnZombie();
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPlayer();
+            drawBullets();
+            drawZombies();
+
+            if (gameOver) {
+                ctx.fillStyle = 'red';
+                ctx.font = '40px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('Game Over', canvas.width / 2, canvas.height / 2);
+                ctx.fillText('Click to Restart', canvas.width / 2, canvas.height / 2 + 50);
+                ctx.textAlign = 'left';
+            }
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function shoot(e) {
+            if (gameOver) {
+                restartGame();
+                return;
+            }
+            if (isPaused) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const dx = x - player.x;
+            const dy = y - player.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            bullets.push({
+                x: player.x,
+                y: player.y,
+                dx: (dx / dist) * bulletSpeed,
+                dy: (dy / dist) * bulletSpeed
+            });
+        }
+
+        function restartGame() {
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+            bullets.length = 0;
+            zombies.length = 0;
+            score = 0;
+            updateScore();
+            gameOver = false;
+            isPaused = false;
+            pauseMenu.style.display = 'none';
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            pauseMenu.style.display = isPaused ? 'block' : 'none';
+        }
+
+        canvas.addEventListener('click', shoot);
+        window.addEventListener('keydown', e => {
+            keys[e.key] = true;
+            if (e.key === ' ') {
+                e.preventDefault();
+                togglePause();
+            }
+        });
+        window.addEventListener('keyup', e => keys[e.key] = false);
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        });
+        resumeButton.addEventListener('click', togglePause);
+
+        function updateCrosshair() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            draw();
+            drawCrosshair();
+            requestAnimationFrame(updateCrosshair);
+        }
+
+        gameLoop();
+        updateCrosshair();
+    </script>
+</body>
+</html>
