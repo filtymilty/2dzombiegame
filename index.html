@@ -135,6 +135,8 @@
         let keys = {};
         let mouseX = 0;
         let mouseY = 0;
+        let clientMouseX = 0;
+        let clientMouseY = 0;
         let spawnRate = 0.005;
         let lastSpawnTime = 0;
         let gameTime = 0;
@@ -204,6 +206,10 @@
         }
 
         function update(timestamp) {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = clientMouseX - rect.left;
+            mouseY = clientMouseY - rect.top;
+
             if (gameOver || isPaused) return;
 
             gameTime = timestamp - lastSpawnTime;
@@ -261,6 +267,7 @@
             drawPlayer();
             drawBullets();
             drawZombies();
+            drawCrosshair();
         }
 
         function gameLoop(timestamp) {
@@ -326,23 +333,14 @@
         });
         window.addEventListener('keyup', e => keys[e.key] = false);
         canvas.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            mouseX = e.clientX - rect.left;
-            mouseY = e.clientY - rect.top;
+            clientMouseX = e.clientX;
+            clientMouseY = e.clientY;
         });
         resumeButton.addEventListener('click', togglePause);
         restartButton.addEventListener('click', restartGame);
 
-        function updateCrosshair() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            draw();
-            drawCrosshair();
-            requestAnimationFrame(updateCrosshair);
-        }
-
         lastSpawnTime = performance.now();
         gameLoop(lastSpawnTime);
-        updateCrosshair();
     </script>
 </body>
 </html>
